@@ -1,0 +1,27 @@
+time tamarin-prover scuttlebutt-private-box.spthy --prove=consistency -D=collkeys
+time tamarin-prover facebook-franking-noreceiver.spthy --prove=Noattack -D=collnmax -D=commit
+time tamarin-prover facebook-franking-nosender.spthy --prove=Noattack -D=collkeys -D=commit
+time tamarin-prover gpg.spthy --prove=consistency_SED -D=collkey
+time tamarin-prover gpg.spthy --prove=consistency_SEIPD -D=collkey
+time tamarin-prover gpg.spthy --prove=consistency_SEIPDtwo -D=collmmax
+time tamarin-prover Yubikey_and_YubiHSM.spthy --prove=k2_is_secret_use_induction -D=n_reuse_1
+time tamarin-prover whatsapp.spthy --prove=consistency -D=Dishonest -D=collkeys
+time tamarin-prover webpush_noserver.spthy --prove=consistency -D=collmmax
+time tamarin-prover saltpack.spthy --prove=consistency -D=collmmax
+time tamarin-prover sframe.spthy --prove=Authentication -D=tag -D=collnmax
+
+
+------
+
+
+tamarin-prover scuttlebutt-private-box.spthy --prove=consistency -D=collkeys - 2.918 
+tamarin-prover facebook-franking-noreceiver.spthy --prove=Noattack -D=collnma - 2.501 total
+tamarin-prover facebook-franking-nosender.spthy --prove=Noattack -D=collkeys - 8.340 total
+tamarin-prover gpg.spthy --prove=consistency_SED -D=collkey - 0.597 
+tamarin-prover gpg.spthy --prove=consistency_SEIPD -D=collkey - 1.159 total
+tamarin-prover gpg.spthy --prove=consistency_SEIPDtwo -D=collmmax - 0.685 total
+tamarin-prover Yubikey_and_YubiHSM.spthy --prove=k2_is_secret_use_induction - 1.733 total
+tamarin-prover whatsapp.spthy --prove=consistency -D=Dishonest -D=collkeys - 2.999 total
+tamarin-prover webpush_noserver.spthy --prove=consistency -D=collmmax - 8.041 total
+tamarin-prover saltpack.spthy --prove=consistency -D=collmmax - 7.579 total
+tamarin-prover sframe.spthy --prove=Authentication -D=tag -D=collnmax - 0.557 total

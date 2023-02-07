@@ -1,0 +1,5 @@
+{
+"restrictions": [["collkeys","collkey","collkeymax"],["collmmax"],["colln","collnmax"],["colladmax"],["n_reuse_1"],["n_reuse_2"],["reveal_nad"]],
+"priority": [["collkeymax"],["collkey"],["colln"],["collmmax"],["n_reuse_1"],["collkeys"]],
+"orders": [["collkeymax","collkey"],["collkey","collkeys"],["collkeymax","collkeys"],["collnmax","colln"]]
+}

@@ -1,0 +1,86 @@
+theory Saltpack
+
+/*
+
+Following https://saltpack.org/encryption-format-v2
+
+
+
+
+*/
+begin
+
+
+
+builtins: diffie-hellman, multiset
+
+
+#include "AEADlibrary.splib"
+
+rule init_user:
+ [Fr(~k)]--[SecKey(~k)]->[!PKey('g'^~k), !SKey(~k), Out('g'^~k)]
+
+
+functions: z/0,none/0,hash/1, lsb1/1, lsb2/1,hmac/2
+// Basic  case
+
+#ifdef Honest
+
+rule send:
+ let epk =  'g'^~esk
+     header = <
+ 'saltpack',
+ 'v20',
+ '0',
+  epk,
+ senc(~payload_key,'g'^~k,'saltpack_sender_key_sbox',none),
+ senc(pk1^~esk, ~payload_key, <~saltpack_recipsb,'1'>,none) +  senc(pk2^~esk, ~payload_key, <~saltpack_recipsb,'2'>,none)
+>
+  mackey1 = hash(<senc(pk1^~esk, z, lsb1(<hash(header), '1'>) , none  ) , senc(pk1^~k, z, lsb2(<hash(header), '1'>) , none  )>)
+  mackey2 = hash(<senc(pk2^~esk, z, lsb1(<hash(header), '2'>) , none  ) , senc(pk2^~k, z, lsb2(<hash(header), '2'>) , none  )>)
+ payload_sbox = senc(~payload_key, ~m, 'saltpack_ploadsb', none)
+in
+ [!SKey(~k),!PKey(pk1),!PKey(pk2), Fr(~m),Fr(~esk),Fr(~payload_key),Fr(~saltpack_sender_key_sbox),
+ Fr(~saltpack_recipsb),Fr(~saltpack_ploadsb)]-->[
+ Out(<header,
+hmac( hash(< hash(header), 'ff', payload_sbox>), mackey1) + hmac( hash(< hash(header), 'ff', payload_sbox>), mackey2) ,
+payload_sbox>
+),
+ !Key(~payload_key), !M('g'^~k), !Key(pk1^~esk), !Key(pk2^~esk), !M(~payload_key), !Key(pk1^~k), !Key(pk2^~k), !M(z), !M(~m)]
+ 
+#endif
+
+
+rule process:
+ let mpk =  'g'^~k
+     epk= 'g'^~esk // magic pattern match
+     opk =  'g'^~osk
+     header = <
+ 'saltpack',
+ 'v20',
+ '0',
+  epk,
+ senc(payload_key,opk, 'saltpack_sender_key_sbox',none),
+ senc(epk^~k, payload_key, <~saltpack_recipsb,i>,none) +  senc(junk1,junk2,junk3,junk4)
+>
+  mackeyi = hash(<senc(epk^~esk, z, lsb1(<hash(header), i>) , none  ) , senc(opk^~k, z, lsb2(<hash(header), i>) , none  )>)
+ payload_sbox = senc(payload_key, m, 'saltpack_ploadsb', none)
+ mess = <header,
+hmac( hash(< hash(header), 'ff', payload_sbox>), mackeyi) + hmac(junk5,junk6) ,
+payload_sbox>
+in
+ [!SKey(~k),
+ In(mess)]--[Receive(mess,m)]->[]
+
+lemma sanity:
+ exists-trace
+ "Ex mess m #i. Receive(mess,m)@i"
+
+lemma secret[reuse]:
+ "All k #i #j. SecKey(k)@i & KU(k)@j ==> F"
+
+lemma consistency:
+  "All mess m1 m2 #i #j. Receive(mess,m1)@i & Receive(mess,m2)@j ==> m1=m2"
+
+
+end

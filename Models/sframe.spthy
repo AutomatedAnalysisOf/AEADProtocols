@@ -1,0 +1,96 @@
+
+
+theory Sframe
+begin
+
+#include "AEADlibrary.splib"
+
+builtins: hashing, signing            
+
+
+
+
+restriction Equality:
+    "All x y #i. Eq(x, y) @ i ==> x = y"
+
+
+restriction Once:
+    "All x #i #j. Once(x) @ i & Once(x) @ j ==> #i = #j"
+
+rule CreateGroup:
+    // This rule creates a new Sframe group.
+    // For now, a Sframe group only uses a single group key (instead of a mapping KID -> Key).
+    [ Fr(~GroupKey) ]
+    --[ CreatedGroup(~GroupKey) ]->
+    [ !Group(~GroupKey), !Key(~GroupKey) ]
+
+rule UserJoinsGroup:
+    // This rule creates a new Sframe user and makes it join an existing group.
+    // A Sframe user consists of a (freshly generated, unique) signature key pair, and the key of the group it joined.
+    // Since generation of user/joining a group happen in the same rule, a user can currently only join a single group.
+    [ !Group(~GroupKey), Fr(~SigningKey) ]
+    --[ UserJoinsGroup(~SigningKey, ~GroupKey) ]->
+    [ !User(~SigningKey, pk(~SigningKey), ~GroupKey) ]
+
+rule AttackerJoinsGroup:
+    // This rule allows the attacker to 'join' an existing group (i.e., learn the group key).
+    [ !Group(~GroupKey) ]
+    --[ AttackerJoinsGroup(~GroupKey) ]->
+    [ Out(~GroupKey) ]
+
+
+
+rule UserSendsSFrame:
+    // This rule lets a benign User send an Sframe to the group
+    // A SFrame is a tuple (Nonce, Header (i.e., associated data), Ciphertext, Tag, Signature(Tag))
+    // We use the SigningKey of a user as Header. This allows the receiver to easily vrfy the msg.
+    let
+        Header = VerificationKey
+        Encryption = senc(~GroupKey, ~Message, ~Nonce, Header)
+        Ciphertext = Encryption
+        Tag = get_tag(Encryption)
+        Signature = sign(Tag, ~SigningKey)
+    in
+    [ !User(~SigningKey, VerificationKey, ~GroupKey),
+      // Freshly generate nonce and message. It does not matter whether the message is fresh.
+      // This is simply a convenient way to generate messages.
+      Fr(~Nonce), Fr(~Message) ]
+    --[ UserSendsSFrame(~GroupKey, Header, ~Message),
+        UserSendsSFrameTranscript(~GroupKey, ~Nonce, Header, ~Message, Tag , Signature),
+      // The Once() action fact enforces the restriction that each User sends only one SFrame.
+      // This allows Tamarin to automatically find a SCU-attack trace that is close to the paper.
+        Once(~SigningKey) ]->
+      // Send the SFrame. This allows the attacker to intercept/learn it.
+      // We do not model that in the actual SFrame protocol the messages are sent to a server that forwards them to 
+      // the actual users in the group. In the paper, the practicality of the attack is also not discussed (it only serves as PoC).
+    [ Out(<~Nonce, Header, Ciphertext, Tag, Signature>), !M(~Message) ]
+
+rule UserReceivesSFrame:
+    // This rule lets a benign user of a group receive a sframe encrypted with the group key.
+    [ !User(~SigningKey, pk(~SigningKey), ~GroupKey),
+      In(<Nonce, Header, senc(~GroupKey, Message, Nonce, Header), Tag, Signature>) ]
+    --[ // Verify signature. Recall, the header is the verification key for the signature.
+        Eq(verify(Signature, Tag, Header), true),
+        Eq(get_tag(senc(~GroupKey, Message, Nonce, Header)),Tag),
+        UserReceivesSFrame(~GroupKey, Header, Message),
+        UserReceivesSFrameTranscript(~GroupKey, Nonce, Header, Message, Tag , Signature)
+    ]->
+    []
+
+
+lemma UserCanReceiveBenignSFrame: exists-trace
+    "Ex Key Nonce Header Message Tag Signature #i #j.
+        UserReceivesSFrameTranscript(Key, Nonce, Header, Message, Tag , Signature) @ j &
+        UserSendsSFrameTranscript(Key, Nonce, Header, Message, Tag , Signature) @ i &
+        #i < #j"
+
+lemma Authentication:
+    "All GroupKey SigningKey Message #i #j.
+        UserJoinsGroup(SigningKey, GroupKey) @ i & #i < #j &
+        UserReceivesSFrame(GroupKey, pk(SigningKey), Message) @ j
+        ==> ( Ex #i. UserSendsSFrame(GroupKey, pk(SigningKey), Message) @ i & #i < #j)"
+     
+
+
+
+end

@@ -1,0 +1,73 @@
+
+
+theory webpush
+begin
+
+#include "AEADlibrary.splib"
+
+builtins: hashing, diffie-hellman
+
+
+/* Generate long-term keypair */
+rule Register_pk:
+  let pkP = 'g'^~ltkP
+  in
+  [ Fr(~ltkP) ] 
+  --> 
+  [ !Ltk($P, ~ltkP), !Pk($P, pkP), Out(pkP) ]
+
+
+
+rule PairParticipants:
+    [ !Ltk($A,~ltkA), !Ltk($B, ~ltkB) ]
+  --[ Pair($A,$B,~ltkA,~ltkB) ]->
+    [ InitAgent(~ltkA,$A,'g'^~ltkB,$B),InitServer(~ltkB,$B,'g'^~ltkA,$A)]
+
+
+rule RequestPushInfo:
+  let
+    gA = 'g'^~adh
+    m = <<'g'^~ltkA,pkB>, 'Info', gA, ~auth>
+  in
+    [ InitAgent(~ltkA,$A,pkB,$B), Fr(~adh), Fr(~auth) ]
+  --[ _restrict(not($A=$B)) ]->
+    [ UserAgent($A, ~ltkA, ~adh, ~auth, $B, pkB), OutSecure(m)]
+
+rule ServerLeak:
+    [ InitServer(~ltkB,$B,pkA,$A), OutSecure(<<pkA,'g'^~ltkB>, 'Info', gA, auth>) ]
+  --[ _restrict(not($A=$B)) ]->
+    [ Out(<~ltkB,$B,pkA,$A,gA,auth>)]
+
+
+
+ rule ReceiveMessage:
+   let
+    info = salt
+    ecdh_sec = gB^~adh
+    PRK_key = h(<~auth,ecdh_sec>)
+    keyinfo = <'webpush', 'g'^~adh, gB>
+    IKM = h(<PRK_key, keyinfo>)
+    PRK = h(<salt, IKM>)
+    CEK = h(<PRK,'cek_info'>)
+    Nonce = h(<PRK,'nonce_info'>)
+    cipher = senc(CEK,m,Nonce,'0')
+   in
+     [ UserAgent($A, ~ltkA, ~adh, ~auth, $B, pkB), In(<$A,'cek_info',<salt , gB>,senc(CEK,m,Nonce,'0')>),!M(m)  ]
+       --[Received(
+<$A,'cek_info',<salt , gB>,senc(CEK,m,Nonce,'0')>       
+,m)
+       ]->
+     [ !Key(CEK)]
+
+
+
+lemma sanity:
+   exists-trace
+     "Ex c p #i. Received(c,p)@i"
+
+
+lemma consistency:
+     "All c p1 p2 #i #j. Received(c,p1)@i & Received(c,p2)@j ==> p1=p2"
+
+
+end

@@ -1,0 +1,49 @@
+theory private_box
+
+
+begin
+
+
+
+builtins: diffie-hellman, multiset
+
+functions: none/0
+
+#include "AEADlibrary.splib"
+
+rule init_user:
+ [Fr(~k)]-->[!PKey('g'^~k), !SKey(~k), Out('g'^~k) ]
+
+
+// Basic  case
+
+#ifdef Honest
+
+rule send_pb:
+  
+ [!PKey(pk1),!PKey(pk2),Fr(~ephem),Fr(~nonce),Fr(~body_key),Fr(~m)]-->[
+ Out(<~nonce,
+     'g'^~ephem,
+     senc(pk1^~ephem,~body_key,~nonce,none) + senc(pk2^~ephem,~body_key,~nonce,none)  ,
+     senc(~body_key,~m, ~nonce,none)>), !Key(pk1^~ephem), !Key(pk2^~ephem),
+!Key(~body_key),
+     !M(~body_key), !M(~m)]
+ 
+#endif
+
+rule process_pb:
+ let mess=  <nonce,
+     pkey,
+     senc(pkey^~k,body_key,nonce,none) + junk,
+     senc(body_key,m, nonce,none)> in
+ [!SKey(~k), In(mess)]--[Receive(mess,m)]->[]
+
+lemma sanity:
+ exists-trace
+ "Ex mess m #i. Receive(mess,m)@i"
+
+lemma consistency:
+  "All mess m1 m2 #i #j. Receive(mess,m1)@i & Receive(mess,m2)@j ==> m1=m2"
+
+
+end

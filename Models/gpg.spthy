@@ -1,0 +1,174 @@
+theory GPG
+begin 
+
+
+/*
+
+
+
+# GPG
+
+This file models the possible message encryptions with the current undergoing openGPG update:
+
+https://datatracker.ietf.org/doc/draft-ietf-openpgp-crypto-refresh/06/
+
+GPG Message = Sequence of packets.
+Packet format : <tag, length, content>
+Interesting tags: 
+   * Public-Key Encrypted Session Key Packets (Tag 1): encrypt a fresh session key for another party
+   * Signature packet (Tag 2): signature of a GPG message
+   * Sym. Encrypted Integrity Protected Data Packet (Tag 18) (v2, aead (GCM, EAX, OCB) encrypted data with session key), data = GPG message
+   * Padding Packet (Tag 21): random bullshit that must be ignored
+
+Follows the Sign Then encrypt paradigm.
+
+## SED (deprecated by the update under draft)
+
+Uses a dedicated GPG-CTR mode to encrypt.
+On input plaintext p and session key sk, 
+formats  m =  r1 || ... || r8 || r7 || r8 || p 
+where rx are random sequences of 8 bits
+return AES-GPG-CTR(key=sk, IV=0, m)
+
+## SEIPD v1
+
+For plaintext p and session key sk, 
+formats  m =  r1 || ... || r8 || r7 || r8 || p || c0 || c1 
+where rx are random sequences of 8 bits (redundancy is for checking correct key), and c0 and c1 are two fixed constant octet.
+
+ AES-CFB(key=sk, Iv=0, m || SHA1(m))  (rk SHA1 is 20 octets)
+
+
+## SEIPD v2
+
+ < one-octet version number with value 2 ||  one-octet cipher algorithm. ||  one-octet AEAD algorithm. ||  one-octet chunk size. || Thirty-two octets  salt ||  Chunk 1 || ... ||Chunk n || final tag>
+
+Given message M and session key sk.
+Set params = Packet Tag, version number, cipher algorithm octet, AEAD algorithm octet, and chunk size
+<k, N1> = HKDF(IKM=sk, salt=salt,infos = params)
+
+M /chunk size = M1 ... Mn 
+
+max_chunk_index =n (64 bits)
+
+Cx = AEAD(key=k, H=params, N = N1 || x , Mx)
+t= AEAD(key=k, H=params, N = N1 || max_chunk_index?, "")   
+(nonce for t is maybe unclear from spec)
+
+final = C1 || ... || Cn || t
+
+
+## v5 PKESK
+
+<A one-octet version number with value 5.,  receiver pub key,  the public-key algorithm used,  Enc> 
+m = sk || two-octet checksum   is appended, which is equal to the sum of the preceding session key    octets, modulo 65536.
+Enc = enc(m,sk)
+
+
+
+
+
+*/
+
+
+
+builtins: asymmetric-encryption, multiset
+
+functions: repeat/1,z/0,none/0
+
+#include "AEADlibrary.splib"
+
+rule init_user:
+ [Fr(~k)]-->[!PKey(pk(~k)), !SKey(~k), Out(pk(~k))]
+
+
+// Basic SED case
+
+#ifdef Honest
+
+rule send_SED:
+ [!PKey(pk1),!PKey(pk2),Fr(~m),Fr(~r),Fr(~sk)]-->
+ [Out(<'SED', aenc(~sk,pk1) + aenc(~sk,pk2)  ,senc(~sk,<~r,repeat(~r),~m>, z,none)>)
+ ,!Key(~sk), !M(<~r,repeat(~r),~m>)]
+ 
+#endif
+
+rule process_SED:
+  let mess = <'SED', aenc(sk,pk(~k)) + junk  ,senc(sk,<r,repeat(r),m>,z,none)> in
+ [!SKey(~k), In(<'SED', aenc(sk,pk(~k)) + junk, senc(sk,<r,repeat(r),m>,z,none)>)]--[ReceiveSED(mess,m)]->[]
+
+lemma sanity_SED:
+ exists-trace
+ "Ex mess m #i. ReceiveSED(mess,m)@i"
+
+lemma consistency_SED:
+  "All mess m1 m2 #i #j. ReceiveSED(mess,m1)@i & ReceiveSED(mess,m2)@j ==> m1=m2"
+
+
+
+// SEIPD v1 case
+
+functions: c0/0,c1/0,sha1/1
+
+#ifdef Honest
+
+rule send_SEIPD:
+  let p = <~r,repeat(~r),~m,c0,c1> in
+ [!PKey(pk1),!PKey(pk2),Fr(~m),Fr(~r),Fr(~sk)]-->
+ [Out(<'SEIPD', aenc(~sk,pk1) + aenc(~sk,pk2)  ,senc(~sk,<p,sha1(p)>, z,none)>),
+ !Key(~sk),!M(<p,sha1(p)>)]
+ 
+#endif
+
+rule process_SEIPD:
+  let p = <r,repeat(r),m,c0,c1> 
+      mess = <'SEIPD', aenc(sk,pk(~k)) + junk  ,senc(sk,<p,sha1(p)>,z,none)> in
+ [!SKey(~k), In(<'SEIPD', aenc(sk,pk(~k)) + junk, senc(sk,<p,sha1(p)>,z,none)>)]--[ReceiveSEIPD(mess,m)]->[]
+
+lemma sanity_SEIPD:
+ exists-trace
+ "Ex mess m #i. ReceiveSEIPD(mess,m)@i"
+
+lemma consistency_SEIPD:
+  "All mess m1 m2 #i #j. ReceiveSEIPD(mess,m1)@i & ReceiveSEIPD(mess,m2)@j ==> m1=m2"
+
+// SEIPD v2 case
+// single chunk case
+
+functions: hkdfnonce/2, hkdfkey/2
+
+#ifdef Honest
+
+rule send_SEIPDtwo:
+  let n = hkdfnonce(~sk,~salt)
+      key = hkdfkey(~sk,~salt)  in
+ [!PKey(pk1),!PKey(pk2),Fr(~m),Fr(~salt),Fr(~sk)]-->[Out(<'SEIPDtwo',
+ aenc(~sk,pk1) + aenc(~sk,pk2),
+ senc(key,~m, <n,z>,none),
+ senc(key,none, <n,'one'> ,none)
+>),
+ !Key(key),!M(~m),!M(none)
+]
+#endif
+
+rule process_SEIPDtwo:
+  let n = hkdfnonce(sk,salt)
+      key = hkdfkey(sk,salt)
+      mess = <'SEIPDtwo', salt, aenc(sk,pk(~k)) + junk, senc(key,m, <n,z>,none), senc(key,none, <n,'one'> ,none)>  in
+ [!SKey(~k), In(<'SEIPDtwo',
+ salt,
+ aenc(sk,pk(~k)) + junk,
+ senc(key,m, <n,z>,none),
+ senc(key,none, <n,'one'> ,none)
+
+>)]--[ReceiveSEIPDtwo(mess,m)]->[]
+
+lemma sanity_SEIPDtwo:
+ exists-trace
+ "Ex mess m #i. ReceiveSEIPDtwo(mess,m)@i"
+
+lemma consistency_SEIPDtwo:
+  "All mess m1 m2 #i #j. ReceiveSEIPDtwo(mess,m1)@i & ReceiveSEIPDtwo(mess,m2)@j ==> m1=m2"
+
+
+end

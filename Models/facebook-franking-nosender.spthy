@@ -1,0 +1,131 @@
+
+
+theory facebook
+begin
+
+#include "AEADlibrary.splib"
+
+builtins: hashing
+
+// We model CtE2 as a standard authenticated encryption here. This may change later when we have moire inside. CtE2 is a ccAEAD
+functions: cte2enc/2, cte2dec/2
+equations: cte2dec(k,cte2enc(k,m)) = m
+
+
+// This tag is and HMAC with an internal facebook key and a message as input. We abstract from the key here
+functions: FBTag/1 [private], securechannel/1 [private]
+// 
+
+//
+// KEY SETUP
+//
+
+
+// Set up Sender and Receiver and skip KEX
+rule SetupParties:
+    [ In($A), In($B), Fr(~kab) ]
+  --[ InitConnection($A,$B,~kab), Secret(~kab)]->
+    [ !A(~kab,$A,$B), !B(~kab,$B,$A) ]
+
+rule StartSession:
+    [ !A(~kab,$A,$B), !B(~kab,$B,$A) ]
+  --[ Start() ]->
+    [ Out(<~kab,$A,$B>), B0(~kab,$B,$A) ]
+
+//
+// Sender
+//
+
+// Because of potential reductions by ETs we keep the Messagespace
+rule CreateMessage:
+    [In(m) ]
+  --[]->
+    [!M(m) ]
+
+
+
+//
+// Receiver
+//
+
+rule RequestContent:
+  let
+  	C = cte2enc(~kab,<~id,<Ka,Da>>)
+  	bind = getCommit(C)
+  	m = <~id,<Ka,Da>>
+  in
+    [ B0(~kab,$B,$A), In(securechannel(<'FACEBOOK_FORWARD',$B,<cte2enc(~kab,<~id,<Ka,Da>>),CB,tfb>>)) ]
+  --[ ContentRequest(), Equal(CB,bind), Receive(~kab,m,C) ]->
+    [ B1(~kab,$B,$A,~id,Ka,Da,C,CB,tfb), Out(securechannel(<<'FACEBOOK_REQUEST',$B>,~id>)) ]
+
+rule ReceiveContent:
+  let
+    Ca = senc(Ka,m,Na,'AD')
+    DaVerify = h(<Na,Ca>)
+  in
+    [ In(securechannel(<'FACEBOOK_PROVIDE',$B,<Na,senc(Ka,m,Na,'AD')>>)), B1(~kab,$B,$A,~id,Ka,Da,C,CB,tfb) ]
+  --[ Equal(Da,DaVerify),ReceiveStore(~kab,<~id,<Ka,Da>>,C)]->
+    [ B2(~kab,$B,$A,~id,Ka,Da,C,CB,tfb,Na,senc(Ka,m,Na,'AD')) ]
+
+rule Report:
+    [ B2(~kab,$B,$A,~id,Ka,Da,C,CB,tfb,Na,senc(Ka,m,Na,'AD')) ]
+  --[ Report(~id,Ka,Da,C,CB,tfb), ReportKey(~kab,<~id,<Ka,Da>>,C) ]->
+    [ Out(securechannel(<'REPORT',~id,Ka,Da,C,CB,tfb,senc(Ka,m,Na,'AD')>)) ]
+
+
+
+// FACEBOOK
+//
+
+rule StoreData:
+    [ Fr(~id), In(<'FACEBOOK_GET_ID',$A,Na,Ca>) ]
+  --[ Stored(~id,Na,Ca,$A) ]->
+    [ !Storage(~id, <Na,Ca>), Out(<'FACEBOOK_SEND_ID',$A,~id>) ]
+
+
+rule Tag:
+  let
+    tfb = FBTag(CB)
+  in
+    [ In(<'FACEBOOK_SET_TAG',$A,$B,<C,CB>>) ]
+  --[ Tagged(CB,tfb) ]->
+    [ Out(securechannel(<'FACEBOOK_FORWARD',$B,<C,CB,tfb>>)) ]
+
+rule ProvideContent:
+    [ !Storage(~id, <Na,Ca>), In(securechannel(<<'FACEBOOK_REQUEST',$B>,~id>)) ]
+  --[ RetrieveContent(~id, $B, <Na,Ca>) ]->
+    [ Out(securechannel(<'FACEBOOK_PROVIDE',$B,<Na,Ca>>)) ]
+
+rule getReport:
+  let
+    tfbtest = FBTag(getCommit(C))
+    Datest = h(<Na,senc(Ka,m,Na,'AD')>)
+  in
+    [ !Storage(~id, <Na,senc(Ka,m,Na,'AD')>), !M(m2),
+      In(securechannel(<'REPORT',~id,Ka2,Da,C,CB,tfb,senc(Ka2,m2,Na,'AD')>)) ]
+  --[ Equal(tfb,tfbtest),
+      Equal(senc(Ka,m,Na,'AD'),senc(Ka2,m2,Na,'AD')),
+  	  Equal(Da,Datest),
+  	  VerifiedReport(~id,m2),
+  	  ReportPossible() ]->
+    [ !ReportStore(~id,m2) ]
+
+
+
+restriction Equality:
+"
+All a b #i. Equal(a,b)@#i ==> a=b    
+"
+
+lemma Noattack:
+"
+All id m1 m2 #i #j. VerifiedReport(id,m1)@#i & VerifiedReport(id,m2)@#j ==> m1=m2
+"
+
+lemma Sanity:
+exists-trace
+"
+Ex #i. ReportPossible()@#i     
+"
+
+end

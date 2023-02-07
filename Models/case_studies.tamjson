@@ -1,0 +1,56 @@
+{
+    "timeout": 60,
+    "silent": true,
+    "cores": 4,
+    "log": false,
+    "models" : ["whatsapp.spthy",
+                "webpush_noserver.spthy",
+                "gpg.spthy",
+                "saltpack.spthy",
+                "scuttlebutt-private-box.spthy",
+                "facebook-franking-noreceiver.spthy",
+                "facebook-franking-nosender.spthy",
+                "sframe.spthy",
+                "Yubikey_and_YubiHSM.spthy"],
+    "whatsapp.spthy" : {
+      "lemmas" : ["consistency"],
+      "fixed_flags" : ["Dishonest"],
+      "flags" : "flags.json"
+      },
+    "sframe.spthy" : {
+      "lemmas" : ["Authentication"],
+      "fixed_flags" : ["tag"],
+      "flags" : "flags_with_tags.json"
+      },
+    "webpush_noserver.spthy" : {
+      "lemmas" : ["consistency"],
+      "flags" : "flags.json"
+      },
+    "gpg.spthy" : {
+      "lemmas" : ["consistency_SED","consistency_SEIPD","consistency_SEIPDtwo"],
+      "flags" : "flags.json"
+      },
+    "saltpack.spthy" : {
+      "lemmas" : ["consistency"],
+      "flags" : "flags.json"
+      },
+    "Yubikey_and_YubiHSM.spthy" : {
+      "lemmas" : ["k2_is_secret_use_induction"],
+      "flags" : "flags.json",
+      "tamcommand" : "--auto-sources"
+      },
+    "scuttlebutt-private-box.spthy" : {
+      "lemmas" : ["consistency"],
+      "flags" : "flags.json"
+      },
+    "facebook-franking-noreceiver.spthy" : {
+      "lemmas" : ["Noattack"],
+      "fixed_flags" : ["commit"],
+      "flags" : "flags.json"
+      },
+    "facebook-franking-nosender.spthy" : {
+      "lemmas" : ["Noattack"],
+      "fixed_flags" : ["commit"],
+      "flags" : "flags.json"
+      }
+}

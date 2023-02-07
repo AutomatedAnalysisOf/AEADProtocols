@@ -1,0 +1,3 @@
+consistency ,False,19,['collkeys']
+consistency ,False,16,['collmmax']
+consistency ,True,58,"['collnmax', 'colladmax', 'n_reuse_1', 'n_reuse_2', 'reveal_nad']"

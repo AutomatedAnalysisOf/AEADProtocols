@@ -1,0 +1,175 @@
+// Basic encryption functionality
+// This is the standard version of AEADs used in older Tamarin models.
+#ifdef not nobasic
+functions: senc/4, sdec/4
+equations: sdec(k,n,ad,senc(k,m,n,ad)) = m
+
+rule GenMSpace:
+    [In(m)]
+  --[  ]->
+    [ !M(m) ]
+
+rule GenMalKey:
+  [In(k)]
+--[  ]->
+  [ !Key(k) ]
+#endif
+
+// weak decryption
+#ifdef forge
+functions: forge/2
+equations: sdec(k2,n2,ad2,forge(senc(k,m,n,ad),m2)) = m2
+#endif
+
+
+
+// reuse of n leads to keyleak
+#ifdef n_reuse_1
+
+restriction notsame:
+ "All x y #i. NotM(x,y)@i ==> not(x=y)"
+
+rule nonce_reuse_1:
+    [ In(senc(k,m,n,ad)), In(senc(k,m2,n,ad2)), !Key(k)]
+  --[ NotM(m,m2), KnowsK(k),  LeakK(k) ]->
+    [ Out(k) ]
+#endif
+
+// reuse of n leads to leak of the messages
+// Here we could also decide for more finegrained output
+// like leaking the XOR of m and m2 like for GCM
+#ifdef n_reuse_2 
+
+
+restriction notsame2:
+ "All x y #i. NotM2(x,y)@i ==> not(x=y)"
+
+rule nonce_reuse_2:
+    [ In(senc(k,m,n,ad)), In(senc(k,m2,n,ad2)), !M(m), !M(m2) ]
+  --[ NotM2(m,m2), LeakM(m,m2) ]->
+    [ Out(<m,m2>) ]
+#endif
+
+// nonce revealing encryption & ad revealing encryption
+// This is used when the encryption
+// does not hide the used nonce and header
+#ifdef reveal_nad
+functions: getnonce/1
+equations: getnonce(senc(k,m,n,ad)) = n
+functions: getad/1
+equations: getad(senc(k,m,n,ad)) = ad
+#endif
+
+
+//encryption leaks the key
+// Leaks the key of the the encryption
+// and is primarily used for sanity checks
+//#ifdef keyleak
+//functions: leak/1
+//equations: leak(senc(k,m,n,ad)) = k
+//#endif
+
+
+// Collision on ciphertext variants
+
+#ifdef collkeys & not collkey & not collkeymax
+functions: key1/5, key2/4
+equations: senc(key1(n,ad,m1,m2,senc(key2(n,ad,m1,m2),n,m2,ad)),m1,n,ad)=senc(key2(n,ad,m1,m2),n,m2,ad)
+#endif
+
+#ifdef not collkeys & collkey & not collkeymax
+functions: key/3
+equations: senc(key(m,m2,senc(k,m,n,ad)),m2,n,ad) = senc(k,m,n,ad) 
+#endif
+
+#ifdef not collkeys & not collkey & collkeymax
+functions: key/7
+equations: senc(key(m,m2,n,n2,ad,ad2,senc(k,m,n,ad)),m2,n2,ad2) = senc(k,m,n,ad) 
+#endif
+
+
+#ifdef  collmmax
+functions: mes/7
+equations: senc(k2,mes(k,k2,n,n2,ad,ad2,senc(k,m,n,ad)),n2,ad2) = senc(k,m,n,ad) 
+#endif
+
+
+#ifdef colln & not collnmax
+functions: non/6, colln/5
+equations: senc(k1,m1,non(k1,k2,m1,m2,ad,colln(k1,k2,m1,m2,ad)),ad)  =  colln(k1,k2,m1,m2,ad) 
+equations: senc(k2,m2,non(k1,k2,m1,m2,ad,colln(k1,k2,m1,m2,ad)),ad)  =  colln(k1,k2,m1,m2,ad)
+#endif
+
+#ifdef not colln & collnmax
+functions: non/7
+equations: senc(k2,m2,non(k,k2,m,m2,ad,ad2,senc(k,m,n,ad)),ad2) = senc(k,m,n,ad) 
+#endif
+
+
+#ifdef  colladmax
+functions: ad/7
+equations: senc(k2,m2,n2,ad(k,k2,m,m2,n,n2,senc(k,m,n,ad))) = senc(k,m,n,ad) 
+#endif
+
+
+// TAGS
+// If we are assuming variants of AEADs were the enryption and authentications
+// parts are divided (like Encrypt-then-MAC constructions) we get an additional
+// 'tag' capability. As tags can also have collisions and collision on the
+// ciphertext are delegated to the tag as well, we also have variants of 
+// all the previous collision variants as well
+
+
+#ifdef tag 
+functions: get_tag/1
+#endif
+
+
+#ifdef tagkeys & not tagkey & not tagkeymax
+functions: tkey1/5, tkey2/4
+equations: get_tag(senc(tkey1(n,ad,m1,m2,get_tag(senc(tkey2(n,ad,m1,m2),n,m2,ad))),m1,n,ad))=get_tag(senc(tkey2(n,ad,m1,m2),n,m2,ad))
+#endif
+
+#ifdef not tagkeys & tagkey & not tagkeymax
+functions: tkey/3
+equations: get_tag(senc(tkey(m,m2,senc(k,m,n,ad)),m2,n,ad)) = get_tag(senc(k,m,n,ad))
+#endif
+
+#ifdef not tagkeys & not tagkey & tagkeymax
+functions: tkey/7
+equations: get_tag(senc(tkey(m,m2,n,n2,ad,ad2,senc(k,m,n,ad)),m2,n2,ad2)) = get_tag(senc(k,m,n,ad))
+#endif
+
+
+#ifdef  tagmmax
+functions: tmes/7
+equations: get_tag(senc(k2,tmes(k,k2,n,n2,ad,ad2,senc(k,m,n,ad)),n2,ad2)) = get_tag(senc(k,m,n,ad))
+#endif
+
+
+#ifdef tagn & not tagnmax
+functions: tnon/6, tcolln/5
+equations: get_tag(senc(k1,m1,tnon(k1,k2,m1,m2,ad,tcolln(k1,k2,m1,m2,ad)),ad))  =  tcolln(k1,k2,m1,m2,ad) 
+equations: get_tag(senc(k2,m2,tnon(k1,k2,m1,m2,ad,tcolln(k1,k2,m1,m2,ad)),ad))  =  tcolln(k1,k2,m1,m2,ad)
+#endif
+
+#ifdef not tagn & tagnmax
+functions: tnon/7
+equations: get_tag(senc(k2,m2,tnon(k,k2,m,m2,ad,ad2,senc(k,m,n,ad)),ad2)) = get_tag(senc(k,m,n,ad))
+#endif
+
+
+#ifdef  tagadmax
+functions: tad/7
+equations: get_tag(senc(k2,m2,n2,tad(k,k2,m,m2,n,n2,senc(k,m,n,ad)))) = get_tag(senc(k,m,n,ad))
+#endif
+
+// For committing AEADs
+#ifdef commit
+functions: getCommit/1
+#endif
+
+
+
+
+

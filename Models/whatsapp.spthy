@@ -1,0 +1,103 @@
+// This is a model of the group messaging mechanism, that abstracts the group creation and focuses on messages exchanges.
+// Following: https://www.whatsapp.com/security/WhatsApp-Security-Whitepaper.pdf, page 10
+
+
+
+
+
+
+theory whatsapp
+
+
+
+begin
+#include "AEADlibrary.splib"
+builtins: signing, multiset
+
+functions: pairwise/2
+
+// Create group with  dishonest member
+#ifdef Dishonest
+
+rule create_group:
+  [ Fr(~skAB), Fr(~skAC), Fr(~skBC)]--[Once('create')]->[
+  Out(<$A,$B,$C,~skAB,~skAC>), // A is the attacker, and knows the two corresponding keys
+  !P($B,$A,$C,~skAB,~skBC),
+  !P($C,$A,$B,~skAC,~skBC)
+  ]
+
+rule dishonest_send:
+ [In(x)]--[Once('dis')]->[!Serv(x)] // The attacker can upload messages as A to the server
+
+// Create group without dishonest member
+#else
+
+rule create_group:
+  [ Fr(~skAB), Fr(~skAC), Fr(~skBC)]--[Once('dis')]->[
+  !P($A,$B,$C,~skAB,~skAC),
+  !P($B,$A,$C,~skAB,~skBC),
+  !P($C,$A,$B,~skAC,~skBC)
+  ]
+
+
+
+#endif
+
+
+restriction once:
+ "All x #i #j. Once(x)@i & Once(x)@j ==> #i = #j"
+
+// A honest agent can send a message to the two other members, using the pairwise channel keys
+// We model the pairwise channels with a pairwise function symbol and the secret.
+rule honest_send_msg:
+ let cipher= senc(~chainkey,~msg,'n','ad')
+     sig = sign(cipher,~signKey) in 
+ [!P(X,Y,Z,~skXY,~skXZ), Fr(~msg), Fr(~chainkey), Fr(~signKey)]-->
+ [!Serv(
+ <  pairwise(~skXY,<X,~chainkey,pk(~signKey)>)
+    + pairwise(~skXZ,<X,~chainkey,pk(~signKey)>),
+    cipher, sig>),
+ !Key(~chainkey), !M(~msg)
+]
+
+
+// A honest agent can reveice a message from of the other two members
+rule honest_rcv_msgY:
+   let inmess = < pairwise(~skXY,<Y,chainkey,pkS>) + pairwise(okey,stuff)
+                  , senc(chainkey,plaintext,'n','ad'), sig>
+     cipher = senc(chainkey,plaintext,'n','ad') in
+ [ !P(X,Y,Z,~skXY,~skXZ),
+ !Serv(inmess) ]--[
+ Neq(~skXY,okey),
+Eq(verify(sig,cipher,pkS),true), Received(X,Y,inmess,plaintext)]->[]
+
+
+rule honest_rcv_msgZ:
+ let inmess = <pairwise(~skXZ,<Z,chainkey,pkS>) + pairwise(okey,stuff),
+                senc(chainkey,plaintext,'n','ad'), sig>
+     cipher = senc(chainkey,plaintext,'n','ad') in
+ [ !P(X,Y,Z,~skXY,~skXZ),
+ !Serv(inmess) ]--[
+ Neq(~skXZ,okey),
+ Eq(verify(sig,cipher,pkS),true), Received(X,Z,inmess,plaintext)]->[]
+
+
+restriction eq:
+ "All x y #i. Eq(x,y)@i ==> x=y"
+
+restriction neq:
+ "All x y #i. Neq(x,y)@i ==> not(x=y)"
+
+
+lemma sanity:
+    exists-trace
+     "Ex x y c p #i. Received(x,y,c,p)@i"
+
+lemma sanityBoth:
+    exists-trace
+     "Ex x y z c p #i #j. Received(y,x,c,p)@i & Received(z,x,c,p)@j & not(y=z)"
+
+lemma consistency:
+     "All x y z c p1 p2 #i #j. Received(y,x,c,p1)@i & Received(z,x,c,p2)@j ==> p1=p2"
+     
+end

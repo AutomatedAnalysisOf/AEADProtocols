@@ -1,0 +1,7 @@
+{
+"restrictions": [["collkeys","collkey","collkeymax","tagkeys","tagkey","tagkeymax"],["collmmax","tagmmax"],["colln","collnmax","tagn","tagnmax"],["colladmax","tagadmax"],["n_reuse_1"],["n_reuse_2"],["reveal_nad"]],
+"priority": [["tagkeymax"],["tagkey"],["tagn"],["tagmmax"],["tagkeys"],["collkeymax"],["collkey"],["colln"],["collmmax"],["n_reuse_1"],["collkeys"]],
+"orders": [["collkeymax","collkey"],["collkey","collkeys"],["collkeymax","collkeys"],["collnmax","colln"],
+["tagkeymax","tagkey"],["tagkey","tagkeys"],["tagkeymax","tagkeys"],["tagnmax","tagn"],
+["collkeymax","tagkeymax"],["collkey","tagkey"],["collkeys","tagkeys"],["collmmax","tagmmax"],["colln","tagn"],["collnmax","tagnmax"],["colladmax","tagadmax"]]
+}
